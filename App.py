@@ -2,55 +2,77 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 
+def preencher_documentos(df_original, df_banco):
+    """
+    Preenche CPF/CNPJ mantendo a estrutura original
+    :param df_original: DataFrame da planilha a ser preenchida
+    :param df_banco: DataFrame com o banco de dados de referência
+    :return: DataFrame processado
+    """
+    # Criar dicionário de mapeamento (razão social -> documento)
+    mapeamento = dict(zip(df_banco['Razão Social'], df_banco['CPF/CNPJ']))
+    
+    # Preencher os documentos mantendo o formato original
+    df_original['CPF'] = df_original['Nome da Pessoa'].map(mapeamento).fillna('nan')
+    
+    return df_original
+
 def main():
-    st.title("Preenchimento de CPF/CNPJ em Contas a Receber")
+    st.title("🔄 Preenchimento Automático de Documentos")
+    st.caption("Preenche CPF/CNPJ em planilhas mantendo o formato original")
     
-    # Upload da planilha de banco de dados (fonte de pesquisa)
-    st.header("1. Banco de Dados para Pesquisa")
-    db_file = st.file_uploader("Carregue a planilha com os dados de CPF/CNPJ (Banco de Dados)", type=["xlsx", "xls"])
+    # Upload do banco de dados
+    st.header("1. Banco de Dados de Referência")
+    st.info("Deve conter colunas 'Razão Social' e 'CPF/CNPJ'")
+    db_file = st.file_uploader("Carregue a planilha de referência", type=["xlsx", "xls"])
     
-    # Upload da planilha a ser preenchida
+    # Upload da planilha a processar
     st.header("2. Planilha a Ser Preenchida")
-    receber_file = st.file_uploader("Carregue a planilha de Contas a Receber", type=["xlsx", "xls"])
+    st.info("Deve conter coluna 'Nome da Pessoa' e 'CPF'")
+    input_file = st.file_uploader("Carregue a planilha a ser preenchida", type=["xlsx", "xls"])
     
-    if db_file and receber_file:
+    if db_file and input_file:
         try:
-            # Carregar os dados
-            db_df = pd.read_excel(db_file)
-            receber_df = pd.read_excel(receber_file)
-            
-            # Verificar colunas necessárias
-            if 'Nome da Pessoa' not in receber_df.columns or 'CPF' not in receber_df.columns:
-                st.error("A planilha de Contas a Receber deve conter as colunas 'Nome da Pessoa' e 'CPF'")
-                return
+            with st.spinner("Processando..."):
+                # Carregar os dados
+                df_banco = pd.read_excel(db_file)
+                df_input = pd.read_excel(input_file)
                 
-            if 'Nome' not in db_df.columns or 'CPF_CNPJ' not in db_df.columns:
-                st.error("A planilha de Banco de Dados deve conter as colunas 'Nome' e 'CPF_CNPJ'")
-                return
-            
-            # Criar dicionário de mapeamento (nome -> cpf/cnpj)
-            mapeamento = dict(zip(db_df['Nome'], db_df['CPF_CNPJ']))
-            
-            # Preencher os CPFs/CNPJs
-            receber_df['CPF'] = receber_df['Nome da Pessoa'].map(mapeamento).fillna('nan')
-            
-            # Preparar para download
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                receber_df.to_excel(writer, index=False)
-            
-            st.success("Planilha processada com sucesso!")
-            
-            # Botão de download
-            st.download_button(
-                label="Baixar Planilha Preenchida",
-                data=output.getvalue(),
-                file_name="contas_a_receber_preenchida.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
+                # Verificar colunas necessárias
+                colunas_necessarias = ['Nome da Pessoa', 'CPF']
+                if not all(col in df_input.columns for col in colunas_necessarias):
+                    st.error(f"A planilha a ser preenchida deve conter as colunas: {', '.join(colunas_necessarias)}")
+                    return
+                
+                if 'Razão Social' not in df_banco.columns or 'CPF/CNPJ' not in df_banco.columns:
+                    st.error("A planilha de referência deve conter as colunas 'Razão Social' e 'CPF/CNPJ'")
+                    return
+                
+                # Processar a planilha
+                df_processado = preencher_documentos(df_input, df_banco)
+                
+                # Gerar arquivo para download
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_processado.to_excel(writer, index=False, sheet_name='Dados Processados')
+                
+                st.success("Processamento concluído!")
+                
+                # Mostrar prévia
+                st.subheader("Prévia do Resultado")
+                st.dataframe(df_processado.head())
+                
+                # Botão de download
+                st.download_button(
+                    label="⬇️ Baixar Planilha Processada",
+                    data=output.getvalue(),
+                    file_name="planilha_processada.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
         except Exception as e:
-            st.error(f"Ocorreu um erro: {str(e)}")
+            st.error(f"Erro no processamento: {str(e)}")
+            st.error("Verifique se os formatos das planilhas estão corretos")
 
 if __name__ == "__main__":
     main()
