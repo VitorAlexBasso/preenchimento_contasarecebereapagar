@@ -1,5 +1,5 @@
 streamlit==1.32.2
-pandas==2.1.4
+pandas==2.2.1  # Versão mais nova compatível
 openpyxl==3.1.2
-numpy==1.26.4
-pyarrow==14.0.1 --only-binary :all:  # Evita compilação
+numpy==2.0.0   # Necessário para pandas 2.2.1+
+pyarrow==15.0.0  # Versão compatível com Python 3.13
