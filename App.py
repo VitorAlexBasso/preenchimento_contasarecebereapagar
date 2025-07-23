@@ -16,11 +16,10 @@ def config_app():
         }
     )
 
-# Leitura segura, sem cache (upload muda o objeto toda vez)
+# Leitura segura, com engine especificado
 def load_data(file):
     try:
-        df = pd.read_excel(file)
-        # Normaliza os nomes das colunas para evitar erros
+        df = pd.read_excel(file, engine='openpyxl')  # 👈 engine obrigatório
         df.columns = (
             df.columns.str.strip()
                       .str.normalize('NFKD')
@@ -38,7 +37,6 @@ def main():
     st.title("🚀 Preenchimento Automático Turbo")
     st.caption("Versão 4.0 - Otimizada para Python 3.13+")
 
-    # Uploads
     col1, col2 = st.columns(2)
     with col1:
         st.header("Banco de Referência")
@@ -61,13 +59,11 @@ def main():
                 df_banco = load_data(db_file)
                 df_input = load_data(input_file)
 
-                # Padroniza colunas para facilitar a validação
                 df_banco.columns = df_banco.columns.str.strip()
                 df_input.columns = df_input.columns.str.strip()
 
-                # Validação
                 required = {
-                    'Banco': ['Razao Social', 'CPF/CNPJ'],  # Sem acento
+                    'Banco': ['Razao Social', 'CPF/CNPJ'],
                     'Input': ['Nome da Pessoa', 'CPF']
                 }
 
@@ -77,7 +73,6 @@ def main():
                         st.error(f"🚨 {df_name}: Faltam colunas: {', '.join(missing)}")
                         return
 
-                # Merge ao invés de map (mais robusto e rápido)
                 df_final = df_input.merge(
                     df_banco[['Razao Social', 'CPF/CNPJ']],
                     left_on='Nome da Pessoa',
@@ -89,7 +84,6 @@ def main():
                 df_final['CPF'] = df_final['CPF/CNPJ'].fillna('')
                 df_final.drop(columns='CPF/CNPJ', inplace=True)
 
-                # Exporta Excel
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_final.to_excel(writer, index=False)
