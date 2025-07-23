@@ -1,0 +1,3 @@
+cmake
+libgomp1
+build-essential
