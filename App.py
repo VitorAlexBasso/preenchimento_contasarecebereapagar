@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 import time
-import numpy as np  # Reforço de compatibilidade
+import numpy as np  # Compatibilidade
 
 # Configuração inicial
 def config_app():
@@ -16,17 +16,13 @@ def config_app():
         }
     )
 
-# Leitura segura, com engine especificado
+# Leitura segura com fallback
 def load_data(file):
     try:
-        df = pd.read_excel(file, engine='openpyxl')  # 👈 engine obrigatório
-        df.columns = (
-            df.columns.str.strip()
-                      .str.normalize('NFKD')
-                      .str.encode('ascii', errors='ignore')
-                      .str.decode('utf-8')
-        )
-        return df
+        return pd.read_excel(file, engine='openpyxl')
+    except ImportError:
+        st.error("⚠️ Falta a dependência 'openpyxl'. Inclua no requirements.txt: openpyxl>=3.1.2")
+        st.stop()
     except Exception as e:
         st.error(f"Erro na leitura: {str(e)}")
         st.stop()
@@ -40,15 +36,11 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         st.header("Banco de Referência")
-        db_file = st.file_uploader("Carregue aqui", 
-                                   type=["xlsx"], 
-                                   key="db",
+        db_file = st.file_uploader("Carregue aqui", type=["xlsx"], key="db",
                                    help="Deve conter 'Razão Social' e 'CPF/CNPJ'")
     with col2:
         st.header("Planilha a Preencher")
-        input_file = st.file_uploader("Carregue aqui", 
-                                      type=["xlsx"], 
-                                      key="input",
+        input_file = st.file_uploader("Carregue aqui", type=["xlsx"], key="input",
                                       help="Deve conter 'Nome da Pessoa' e 'CPF'")
 
     if db_file and input_file:
