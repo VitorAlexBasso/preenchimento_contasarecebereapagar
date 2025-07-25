@@ -2,9 +2,10 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 import time
-import numpy as np  # Compatibilidade
+import numpy as np
+import unicodedata
+import re
 
-# Configuração inicial
 def config_app():
     st.set_page_config(
         page_title="⚡ Preenchimento Turbo 3.13",
@@ -16,7 +17,6 @@ def config_app():
         }
     )
 
-# Leitura segura com fallback
 def load_data(file):
     try:
         return pd.read_excel(file, engine='openpyxl')
@@ -27,13 +27,18 @@ def load_data(file):
         st.error(f"Erro na leitura: {str(e)}")
         st.stop()
 
-# Função para buscar coluna com variações
+def normalizar_texto(texto):
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = texto.encode('ASCII', 'ignore').decode('utf-8')
+    texto = re.sub(r'[^a-zA-Z0-9]', '', texto)
+    return texto.lower()
+
 def encontrar_coluna(colunas, nomes_possiveis):
-    colunas_normalizadas = {c.strip().lower(): c for c in colunas}
+    colunas_dict = {normalizar_texto(c): c for c in colunas}
     for nome in nomes_possiveis:
-        nome_normalizado = nome.strip().lower()
-        if nome_normalizado in colunas_normalizadas:
-            return colunas_normalizadas[nome_normalizado]
+        nome_normalizado = normalizar_texto(nome)
+        if nome_normalizado in colunas_dict:
+            return colunas_dict[nome_normalizado]
     return None
 
 def main():
@@ -63,21 +68,17 @@ def main():
                 df_banco.columns = df_banco.columns.str.strip()
                 df_input.columns = df_input.columns.str.strip()
 
-                # Encontra as colunas corretamente, mesmo com variações
                 col_razao_social = encontrar_coluna(df_banco.columns, ["Razao Social", "Razão Social"])
                 col_cpf_cnpj = encontrar_coluna(df_banco.columns, ["CPF/CNPJ", "Cpf/Cnpj", "Documento"])
                 col_nome_pessoa = encontrar_coluna(df_input.columns, ["Nome da Pessoa"])
                 col_cpf = encontrar_coluna(df_input.columns, ["CPF"])
 
-                # Validação
-                missing = []
-                if not col_razao_social: missing.append("Razao Social")
-                if not col_cpf_cnpj: missing.append("CPF/CNPJ")
-                if not col_nome_pessoa: missing.append("Nome da Pessoa")
-                if not col_cpf: missing.append("CPF")
+                if not col_razao_social or not col_cpf_cnpj:
+                    st.error(f"🚨 Banco: Faltam colunas: {', '.join([c for c, v in zip(['Razao Social', 'CPF/CNPJ'], [col_razao_social, col_cpf_cnpj]) if not v])}")
+                    return
 
-                if missing:
-                    st.error(f"🚨 Faltam colunas: {', '.join(missing)}")
+                if not col_nome_pessoa or not col_cpf:
+                    st.error(f"🚨 Input: Faltam colunas: {', '.join([c for c, v in zip(['Nome da Pessoa', 'CPF'], [col_nome_pessoa, col_cpf]) if not v])}")
                     return
 
                 df_final = df_input.merge(
