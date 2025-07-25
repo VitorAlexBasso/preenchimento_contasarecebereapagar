@@ -27,6 +27,15 @@ def load_data(file):
         st.error(f"Erro na leitura: {str(e)}")
         st.stop()
 
+# Função para buscar coluna com variações
+def encontrar_coluna(colunas, nomes_possiveis):
+    colunas_normalizadas = {c.strip().lower(): c for c in colunas}
+    for nome in nomes_possiveis:
+        nome_normalizado = nome.strip().lower()
+        if nome_normalizado in colunas_normalizadas:
+            return colunas_normalizadas[nome_normalizado]
+    return None
+
 def main():
     config_app()
 
@@ -54,27 +63,33 @@ def main():
                 df_banco.columns = df_banco.columns.str.strip()
                 df_input.columns = df_input.columns.str.strip()
 
-                required = {
-                    'Banco': ['Razao Social', 'CPF/CNPJ'],
-                    'Input': ['Nome da Pessoa', 'CPF']
-                }
+                # Encontra as colunas corretamente, mesmo com variações
+                col_razao_social = encontrar_coluna(df_banco.columns, ["Razao Social", "Razão Social"])
+                col_cpf_cnpj = encontrar_coluna(df_banco.columns, ["CPF/CNPJ", "Cpf/Cnpj", "Documento"])
+                col_nome_pessoa = encontrar_coluna(df_input.columns, ["Nome da Pessoa"])
+                col_cpf = encontrar_coluna(df_input.columns, ["CPF"])
 
-                for df_name, df, cols in zip(required.keys(), [df_banco, df_input], required.values()):
-                    missing = [col for col in cols if col not in df.columns]
-                    if missing:
-                        st.error(f"🚨 {df_name}: Faltam colunas: {', '.join(missing)}")
-                        return
+                # Validação
+                missing = []
+                if not col_razao_social: missing.append("Razao Social")
+                if not col_cpf_cnpj: missing.append("CPF/CNPJ")
+                if not col_nome_pessoa: missing.append("Nome da Pessoa")
+                if not col_cpf: missing.append("CPF")
+
+                if missing:
+                    st.error(f"🚨 Faltam colunas: {', '.join(missing)}")
+                    return
 
                 df_final = df_input.merge(
-                    df_banco[['Razao Social', 'CPF/CNPJ']],
-                    left_on='Nome da Pessoa',
-                    right_on='Razao Social',
+                    df_banco[[col_razao_social, col_cpf_cnpj]],
+                    left_on=col_nome_pessoa,
+                    right_on=col_razao_social,
                     how='left'
                 )
 
-                df_final.drop(columns='Razao Social', inplace=True)
-                df_final['CPF'] = df_final['CPF/CNPJ'].fillna('')
-                df_final.drop(columns='CPF/CNPJ', inplace=True)
+                df_final.drop(columns=col_razao_social, inplace=True)
+                df_final[col_cpf] = df_final[col_cpf_cnpj].fillna('')
+                df_final.drop(columns=col_cpf_cnpj, inplace=True)
 
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
