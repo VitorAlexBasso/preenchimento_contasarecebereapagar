@@ -5,6 +5,7 @@ import time
 import numpy as np
 import unicodedata
 import re
+from openpyxl.styles import numbers
 
 def config_app():
     st.set_page_config(
@@ -19,7 +20,8 @@ def config_app():
 
 def load_data(file):
     try:
-        return pd.read_excel(file, engine='openpyxl')
+        # Usar dtype=str para manter a formatação original como texto
+        return pd.read_excel(file, engine='openpyxl', dtype=str)
     except ImportError:
         st.error("⚠️ Falta a dependência 'openpyxl'. Inclua no requirements.txt: openpyxl>=3.1.2")
         st.stop()
@@ -28,6 +30,9 @@ def load_data(file):
         st.stop()
 
 def normalizar_texto(texto):
+    if pd.isna(texto):
+        return ""
+    texto = str(texto)
     texto = unicodedata.normalize('NFKD', texto)
     texto = texto.encode('ASCII', 'ignore').decode('utf-8')
     texto = re.sub(r'[^a-zA-Z0-9]', '', texto)
@@ -41,6 +46,12 @@ def encontrar_coluna(colunas, nomes_possiveis):
             return colunas_dict[nome_normalizado]
     return None
 
+def formatar_planilha(worksheet):
+    # Aplicar formatação de texto para todas as células
+    for row in worksheet.iter_rows():
+        for cell in row:
+            cell.number_format = numbers.FORMAT_TEXT
+
 def main():
     config_app()
 
@@ -51,17 +62,18 @@ def main():
     with col1:
         st.header("Banco de Referência")
         db_file = st.file_uploader("Carregue aqui", type=["xlsx"], key="db",
-                                   help="Deve conter 'Razão Social' e 'CPF/CNPJ'")
+                                 help="Deve conter 'Razão Social' e 'CPF/CNPJ'")
     with col2:
         st.header("Planilha a Preencher")
         input_file = st.file_uploader("Carregue aqui", type=["xlsx"], key="input",
-                                      help="Deve conter 'Nome da Pessoa' e 'CPF'")
+                                    help="Deve conter 'Nome da Pessoa' e 'CPF'")
 
     if db_file and input_file:
         start_time = time.perf_counter()
 
         with st.spinner("🔍 Processando..."):
             try:
+                # Carregar dados mantendo o formato de texto
                 df_banco = load_data(db_file)
                 df_input = load_data(input_file)
 
@@ -81,6 +93,12 @@ def main():
                     st.error(f"🚨 Input: Faltam colunas: {', '.join([c for c, v in zip(['Nome da Pessoa', 'CPF'], [col_nome_pessoa, col_cpf]) if not v])}")
                     return
 
+                # Garantir que as colunas de junção sejam strings
+                df_banco[col_razao_social] = df_banco[col_razao_social].astype(str)
+                df_banco[col_cpf_cnpj] = df_banco[col_cpf_cnpj].astype(str)
+                df_input[col_nome_pessoa] = df_input[col_nome_pessoa].astype(str)
+                df_input[col_cpf] = df_input[col_cpf].astype(str)
+
                 df_final = df_input.merge(
                     df_banco[[col_razao_social, col_cpf_cnpj]],
                     left_on=col_nome_pessoa,
@@ -89,12 +107,16 @@ def main():
                 )
 
                 df_final.drop(columns=col_razao_social, inplace=True)
-                df_final[col_cpf] = df_final[col_cpf_cnpj].fillna('')
+                # Preencher valores vazios com string vazia
+                df_final[col_cpf] = df_final[col_cpf_cnpj].fillna('').astype(str)
                 df_final.drop(columns=col_cpf_cnpj, inplace=True)
 
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_final.to_excel(writer, index=False)
+                    # Acessar a worksheet para aplicar formatação
+                    worksheet = writer.sheets['Sheet1']
+                    formatar_planilha(worksheet)
                 output.seek(0)
 
                 elapsed = time.perf_counter() - start_time
@@ -109,7 +131,11 @@ def main():
                 )
 
                 with st.expander("🔍 Visualizar Resultado"):
-                    st.dataframe(df_final.head(), use_container_width=True)
+                    # Exibir mantendo os zeros à esquerda
+                    st.dataframe(df_final.head().style.set_properties(**{
+                        'text-align': 'left',
+                        'white-space': 'pre'
+                    }), use_container_width=True)
 
             except Exception as e:
                 st.error(f"❌ Falha: {str(e)}")
